@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Folyadék monitor</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 360px;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+    }
+
+    .progress-container {
+      position: relative;
+      width: 220px;
+      height: 220px;
+      margin: 0 auto 20px;
+    }
+
+    svg {
+      transform: rotate(-90deg);
+    }
+
+    .progress-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.2rem;
+    }
+
+    .progress-text small {
+      opacity: 0.8;
+      font-size: 0.9rem;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      font-size: 1rem;
+    }
+
+    button {
+      padding: 14px;
+      font-size: 1.1rem;
+      border-radius: 14px;
+      border: none;
+      background: #38bdf8;
+      color: #020617;
+      font-weight: 600;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 0.75rem;
+      opacity: 0.6;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>💧 Napi folyadékbevitel</h1>
+
+    <div class="progress-container">
+      <svg width="220" height="220">
+        <circle cx="110" cy="110" r="100" stroke="#1e293b" stroke-width="14" fill="none" />
+        <circle id="progressCircle" cx="110" cy="110" r="100" stroke="#38bdf8" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="628" stroke-dashoffset="628" />
+      </svg>
+      <div class="progress-text">
+        <div id="currentMl">0 ml</div>
+        <small id="goalMl">/ 2000 ml</small>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div>
+        <label>Napi cél (ml)</label>
+        <input id="goalInput" type="number" min="500" step="100" />
+      </div>
+
+      <div>
+        <label>Pohár mérete (ml)</label>
+        <input id="cupInput" type="number" min="50" step="50" />
+      </div>
+
+      <button id="drinkBtn">Ittam 💦</button>
+    </div>
+
+    <div class="footer">Adatok mentése éjfélig (localStorage)</div>
+  </div>
+
+  <script>
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+
+    const state = JSON.parse(localStorage.getItem('water_' + todayKey)) || {
+      goal: 2000,
+      cup: 250,
+      current: 0
+    };
+
+    const goalInput = document.getElementById('goalInput');
+    const cupInput = document.getElementById('cupInput');
+    const drinkBtn = document.getElementById('drinkBtn');
+    const currentMl = document.getElementById('currentMl');
+    const goalMl = document.getElementById('goalMl');
+    const circle = document.getElementById('progressCircle');
+
+    const circumference = 2 * Math.PI * 100;
+
+    function save() {
+      localStorage.setItem('water_' + todayKey, JSON.stringify(state));
+    }
+
+    function render() {
+      goalInput.value = state.goal;
+      cupInput.value = state.cup;
+      currentMl.textContent = `${state.current} ml`;
+      goalMl.textContent = `/ ${state.goal} ml`;
+
+      const progress = Math.min(state.current / state.goal, 1);
+      circle.style.strokeDasharray = circumference;
+      circle.style.strokeDashoffset = circumference * (1 - progress);
+
+      renderWeeklyStats();
+    }
+
+    goalInput.addEventListener('change', () => {
+      state.goal = Number(goalInput.value);
+      save();
+      render();
+    });
+
+    cupInput.addEventListener('change', () => {
+      state.cup = Number(cupInput.value);
+      save();
+    });
+
+    function addDrink() {
+      state.current += state.cup;
+      save();
+      render();
+    }
+
+    drinkBtn.addEventListener('click', addDrink);
+
+    /* ===== Shortcuts URL támogatás =====
+       ?drink=1  -> hozzáad egy poharat automatikusan
+    */
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('drink') === '1') {
+      addDrink();
+      // opcionálisan automatikus bezárás Safariban
+      setTimeout(() => window.close(), 300);
+    }
+
+    /* ===== Heti statisztika ===== */
+    function renderWeeklyStats() {
+      const statsEl = document.getElementById('weeklyStats');
+      if (!statsEl) return;
+
+      let total = 0;
+      let days = 0;
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date();
+        d.setDate(today.getDate() - i);
+        const key = 'water_' + d.toISOString().slice(0, 10);
+        const data = JSON.parse(localStorage.getItem(key));
+        if (data) {
+          total += data.current;
+          days++;
+        }
+      }
+
+      const avg = days ? Math.round(total / days) : 0;
+      statsEl.textContent = `Heti átlag: ${avg} ml/nap`;
+    }
+
+    render();
+  </script>
+</body>
+</html>
